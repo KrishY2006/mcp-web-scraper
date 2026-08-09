@@ -309,3 +309,154 @@ def extract_tables(
         result.append({"headers": headers, "rows": rows_data})
 
     return result
+
+
+def _attr_value(element: Tag, attr: str) -> str | None:
+    """Return ``attr`` from ``element`` as a flat string, or None.
+
+    BeautifulSoup returns the ``class`` attribute as a list; such values are
+    joined with spaces so every attribute is returned as a string.
+    """
+    value = element.get(attr)
+    if value is None:
+        return None
+    if isinstance(value, list):
+        value = " ".join(str(item) for item in value)
+    return str(value)
+
+
+def _resolve_url_attr(attr: str, value: str, base_url: str) -> str:
+    """Resolve ``value`` against ``base_url`` when ``attr`` is a URL attribute."""
+    if attr in ("href", "src"):
+        return urllib.parse.urljoin(base_url, value)
+    return value
+
+
+def _extract_field(
+    soup: BeautifulSoup,
+    spec: str | dict[str, Any],
+    base_url: str,
+) -> Any:
+    """Extract a single output field according to its selector spec.
+
+    Args:
+        soup: The parsed HTML to search.
+        spec: A plain CSS selector string, or a selector object with optional
+            ``attr`` and ``all`` keys.
+        base_url: The page URL, used to resolve relative href/src values.
+
+    Returns:
+        The cleaned text of the first match, the requested attribute value,
+        or (for ``all``) a list of such values.  Returns None, or an empty
+        list for ``all``, when nothing matches.
+
+    Raises:
+        ExtractionError: If ``spec`` is malformed.
+    """
+    if isinstance(spec, str):
+        if not spec.strip():
+            raise ExtractionError("CSS selector must be a non-empty string.")
+        element = soup.select_one(spec)
+        if element is None:
+            return None
+        return _clean_text(element.get_text(" ", strip=True))
+
+    if isinstance(spec, dict):
+        selector = spec.get("selector")
+        if not isinstance(selector, str) or not selector.strip():
+            raise ExtractionError(
+                "Each selector object must contain a non-empty 'selector' string."
+            )
+
+        attr = spec.get("attr")
+        if attr is not None and not isinstance(attr, str):
+            raise ExtractionError("'attr' must be a string when provided.")
+
+        take_all = spec.get("all", False)
+        if not isinstance(take_all, bool):
+            raise ExtractionError("'all' must be a boolean when provided.")
+
+        if take_all:
+            elements = soup.select(selector)
+            if attr is None:
+                return [
+                    _clean_text(element.get_text(" ", strip=True))
+                    for element in elements
+                ]
+            values = []
+            for element in elements:
+                value = _attr_value(element, attr)
+                if value is not None:
+                    values.append(_resolve_url_attr(attr, value, base_url))
+            return values
+
+        element = soup.select_one(selector)
+        if element is None:
+            return None
+        if attr is not None:
+            value = _attr_value(element, attr)
+            if value is None:
+                return None
+            return _resolve_url_attr(attr, value, base_url)
+        return _clean_text(element.get_text(" ", strip=True))
+
+    raise ExtractionError(
+        "Each selector must be a CSS selector string or an object with a "
+        "'selector' key."
+    )
+
+
+def extract_structured(
+    html: str,
+    selectors: dict[str, str | dict[str, Any]],
+    base_url: str,
+) -> dict[str, Any]:
+    """Extract structured fields from HTML using a map of CSS selectors.
+
+    ``selectors`` maps each output field name to either a plain CSS selector
+    string or an object describing how to extract that field::
+
+        {
+            "title": "h1",
+            "price": ".price",
+            "image": {"selector": "img.hero", "attr": "src"},
+            "tags": {"selector": ".tag", "all": True},
+        }
+
+    A plain string returns the cleaned text of the first matching element
+    (or None if nothing matches).  A selector object supports:
+
+    - ``attr``: return the named attribute of the first match instead of its
+      text.  Relative ``href``/``src`` values are resolved against
+      ``base_url``.
+    - ``all``: return a list of cleaned text values for every match, or an
+      empty list when nothing matches.  It can be combined with ``attr`` to
+      return a list of attribute values.
+
+    This function performs no network requests: it is a pure function of the
+    HTML it is given.
+
+    Args:
+        html: The HTML to search.
+        selectors: A mapping of output field names to extraction specs.
+        base_url: The absolute http:// or https:// URL of the page, used to
+            resolve relative href/src attribute values.
+
+    Returns:
+        A dict mapping each output field name to its extracted value.
+
+    Raises:
+        ExtractionError: If ``selectors`` is not a dict or any selector is
+            malformed.  A selector that simply matches nothing does not
+            raise.
+    """
+    if not isinstance(selectors, dict):
+        raise ExtractionError(
+            "selectors must be a dict mapping field names to CSS selectors."
+        )
+
+    soup = _make_soup(html)
+    return {
+        str(field): _extract_field(soup, spec, base_url)
+        for field, spec in selectors.items()
+    }

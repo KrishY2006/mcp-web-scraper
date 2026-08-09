@@ -17,9 +17,9 @@ from mcp.server.fastmcp import FastMCP
 
 from web_scraper_mcp.extract import (
     ExtractionError,
-    extract_css,
     extract_links,
     extract_readable_text,
+    extract_structured,
     extract_tables,
 )
 from web_scraper_mcp.fetch import FetchError, FetchResult, fetch_page
@@ -98,40 +98,43 @@ async def scrape_read(
 @mcp.tool()
 async def scrape_extract(
     url: str,
-    selector: str,
+    selectors: dict[str, Any],
     timeout_seconds: float = 10.0,
     max_bytes: int = 1_000_000,
-    max_matches: int = 10,
-    max_chars_per_match: int = 1_000,
 ) -> dict[str, Any]:
-    """Fetch a webpage and extract elements matching a CSS selector.
+    """Fetch a webpage and extract structured fields from it.
+
+    ``selectors`` maps output field names to CSS selectors.  Each value is
+    either a plain selector string (first match, cleaned text) or an object
+    describing how to extract the field::
+
+        {
+            "title": "h1",
+            "price": ".price",
+            "image": {"selector": "img.hero", "attr": "src"},
+            "tags": {"selector": ".tag", "all": True},
+        }
 
     Args:
         url: The absolute http:// or https:// URL to scrape.
-        selector: A CSS selector (for example "h1" or "p.intro").
+        selectors: A dict of field names to CSS selectors or selector
+            objects.
         timeout_seconds: Timeout for the request, in seconds.
         max_bytes: Maximum response size to download, in bytes.
-        max_matches: Maximum number of matching elements to return.
-        max_chars_per_match: Maximum number of text characters per match.
 
     Returns:
-        A dict with the final URL, the HTTP status code, and a list of
-        matches. Each match has "tag", "text", and "attrs" keys.
+        A dict with the final URL after redirects, the HTTP status code, and
+        the extracted fields.
     """
     page = await _fetch_page(url, timeout_seconds, max_bytes)
     try:
-        matches = extract_css(
-            page.content,
-            selector,
-            max_matches=max_matches,
-            max_chars_per_match=max_chars_per_match,
-        )
+        fields = extract_structured(page.content, selectors, page.url)
     except ExtractionError as exc:
         _extract_error(url, exc)
     return {
         "final_url": page.url,
         "status_code": page.status_code,
-        "matches": matches,
+        "fields": fields,
     }
 
 
