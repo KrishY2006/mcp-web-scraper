@@ -54,6 +54,25 @@ TABLE_HTML = """
 </table>
 """
 
+CHROME_HTML = """
+<html>
+<body>
+    <header>Site Header</header>
+    <nav>
+        <a href="/home">Home</a>
+        <a href="/about">About</a>
+    </nav>
+    <main>
+        <aside>Sidebar Ad</aside>
+        <h1>Article Title</h1>
+        <p>This is the article body.</p>
+        <noscript>Please enable JavaScript.</noscript>
+    </main>
+    <footer>Site Footer</footer>
+</body>
+</html>
+"""
+
 STRUCTURED_HTML = """
 <html>
 <head><title>Structured Page</title></head>
@@ -80,6 +99,24 @@ def test_readable_text_preserves_internal_whitespace():
     text = extract_readable_text(READABLE_HTML)
 
     assert "Hello   world" in text
+
+
+def test_readable_text_removes_chrome_elements():
+    text = extract_readable_text(CHROME_HTML)
+
+    assert "Site Header" not in text
+    assert "Home" not in text
+    assert "About" not in text
+    assert "Sidebar Ad" not in text
+    assert "Site Footer" not in text
+    assert "Please enable JavaScript" not in text
+
+
+def test_readable_text_preserves_main_content():
+    text = extract_readable_text(CHROME_HTML)
+
+    assert "Article Title" in text
+    assert "This is the article body." in text
 
 
 def test_css_selector_extraction():

@@ -82,8 +82,10 @@ def _attrs_to_json(element: Tag) -> dict[str, str]:
 def extract_readable_text(html: str, max_chars: int = 10_000) -> str:
     """Extract clean, readable text from an HTML string.
 
-    Script and style blocks are removed, block boundaries become newlines,
-    blank lines are dropped, and the result is capped at ``max_chars``.
+    Navigation/chrome and code blocks (``nav``, ``header``, ``footer``,
+    ``aside``, ``script``, ``style``, ``noscript``) are removed, block
+    boundaries become newlines, blank lines are dropped, and the result is
+    capped at ``max_chars``.
 
     Args:
         html: The HTML to extract text from.
@@ -100,8 +102,10 @@ def extract_readable_text(html: str, max_chars: int = 10_000) -> str:
 
     soup = _make_soup(html)
 
-    # Remove elements that contain code rather than readable content.
-    for element in soup(["script", "style"]):
+    # Remove navigation/chrome and code elements rather than content.
+    for element in soup(
+        ["nav", "header", "footer", "aside", "script", "style", "noscript"]
+    ):
         element.decompose()
 
     # Use a newline separator, then drop blank lines.
