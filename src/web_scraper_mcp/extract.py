@@ -178,8 +178,10 @@ def _normalize_url(url: str) -> str:
 def extract_links(
     html: str,
     base_url: str,
-    max_links: int = 100,
-) -> list[ExtractedLink]:
+    same_domain: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
     """Extract links from anchor tags.
 
     Relative URLs are resolved against ``base_url``, fragments are dropped,
@@ -190,10 +192,17 @@ def extract_links(
         html: The HTML to search.
         base_url: The absolute ``http://`` or ``https://`` URL that relative
             links should be resolved against.
-        max_links: Maximum number of unique links to return.
+        same_domain: If True, only keep links whose hostname matches the
+            hostname of ``base_url``.  Ports are ignored when comparing
+            hostnames.
+        limit: Maximum number of links to return, after filtering and
+            ``offset``.
+        offset: Number of matching links to skip before applying ``limit``.
 
     Returns:
-        A list of dicts shaped like ``{"url": "https://...", "text": "..."}``.
+        A dict with the ``total`` number of unique links (after same-domain
+        filtering but before offset/limit) and the requested ``links`` page.
+        Each link is shaped like ``{"url": "https://...", "text": "..."}``.
 
     Raises:
         ExtractionError: If ``base_url`` is invalid or any argument is out of
@@ -207,10 +216,14 @@ def extract_links(
         raise ExtractionError(
             "base_url must be an absolute http:// or https:// URL."
         )
-    if max_links <= 0:
-        raise ExtractionError("max_links must be greater than zero.")
+    if limit < 0:
+        raise ExtractionError("limit must not be negative.")
+    if offset < 0:
+        raise ExtractionError("offset must not be negative.")
 
     soup = _make_soup(html)
+
+    base_host = base_parts.hostname
 
     links: list[ExtractedLink] = []
     seen: set[str] = set()
@@ -232,13 +245,18 @@ def extract_links(
             continue
         seen.add(absolute)
 
+        # Compare hostnames (not raw URL strings) so ports are ignored.
+        if same_domain and urllib.parse.urlsplit(absolute).hostname != base_host:
+            continue
+
         text = _clean_text(anchor.get_text(strip=True))
         links.append({"url": absolute, "text": text})
 
-        if len(links) >= max_links:
-            break
-
-    return links
+    total = len(links)
+    return {
+        "total": total,
+        "links": links[offset : offset + limit],
+    }
 
 
 def extract_tables(

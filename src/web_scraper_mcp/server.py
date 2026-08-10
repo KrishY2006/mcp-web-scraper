@@ -141,34 +141,48 @@ async def scrape_extract(
 @mcp.tool()
 async def scrape_links(
     url: str,
+    same_domain: bool = False,
+    limit: int = 100,
+    offset: int = 0,
     timeout_seconds: float = 10.0,
     max_bytes: int = 1_000_000,
-    max_links: int = 100,
 ) -> dict[str, Any]:
     """Fetch a webpage and return the links found on it.
 
     Links are resolved against the final page URL, so relative links become
-    absolute HTTP/HTTPS URLs.
+    absolute HTTP/HTTPS URLs.  Duplicate links are returned only once.
 
     Args:
         url: The absolute http:// or https:// URL to scrape.
+        same_domain: If True, only keep links whose hostname matches the
+            hostname of the final page URL.  Ports are ignored when
+            comparing hostnames.
+        limit: Maximum number of links to return, after filtering and
+            ``offset``.
+        offset: Number of matching links to skip before applying ``limit``.
         timeout_seconds: Timeout for the request, in seconds.
         max_bytes: Maximum response size to download, in bytes.
-        max_links: Maximum number of unique links to return.
 
     Returns:
-        A dict with the final URL, the HTTP status code, and a list of links.
-        Each link has "url" and "text" keys.
+        A dict with the final URL after redirects, the HTTP status code, the
+        total number of matching links, and the requested page of links.
     """
     page = await _fetch_page(url, timeout_seconds, max_bytes)
     try:
-        links = extract_links(page.content, page.url, max_links=max_links)
+        result = extract_links(
+            page.content,
+            page.url,
+            same_domain=same_domain,
+            limit=limit,
+            offset=offset,
+        )
     except ExtractionError as exc:
         _extract_error(url, exc)
     return {
         "final_url": page.url,
         "status_code": page.status_code,
-        "links": links,
+        "total": result["total"],
+        "links": result["links"],
     }
 
 

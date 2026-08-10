@@ -97,9 +97,10 @@ def test_css_missing_selector_raises():
 
 
 def test_link_extraction_resolves_relative_urls():
-    links = extract_links(LINKS_HTML, "https://example.com/shop/index.html")
+    result = extract_links(LINKS_HTML, "https://example.com/shop/index.html")
 
-    assert links == [
+    assert result["total"] == 3
+    assert result["links"] == [
         {"url": "https://example.com/products", "text": "Products"},
         {"url": "https://other.example.com/item", "text": "Other"},
         {"url": "https://example.com/shop/index.html", "text": "Anchor"},
