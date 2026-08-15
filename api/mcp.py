@@ -9,7 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from web_scraper_mcp.server import mcp
 
 allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
-for env_var in ("VERCEL_PROJECT_DOMAIN", "VERCEL_URL", "VERCEL_BRANCH_URL"):
+for env_var in (
+    "VERCEL_PROJECT_DOMAIN",
+    "VERCEL_URL",
+    "VERCEL_BRANCH_URL",
+    "VERCEL_PROJECT_PRODUCTION_URL",
+):
     host = os.environ.get(env_var)
     if host:
         allowed_hosts.append(host)
